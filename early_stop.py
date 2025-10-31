@@ -1,8 +1,5 @@
-import torch
-
-
 class EarlyStopping:
-    def __init__(self, patience=5, min_delta=0.01, verbose=False):
+    def __init__(self, patience=10, min_delta=0.001, verbose=False):
         self.patience = patience
         self.min_delta = min_delta
         self.verbose = verbose
