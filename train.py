@@ -10,7 +10,7 @@ from torchvision.transforms import ToTensor
 from tqdm import tqdm
 
 from early_stop import EarlyStopping
-from resnet import ResNet18
+from resnet import ResNet34
 
 # --- 1. Tập dữ liệu ---
 batch_size = 512
@@ -22,7 +22,7 @@ test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_la
 
 # --- 2. Thiết lập mô hình ---
 device = "cuda" if torch.cuda.is_available() else "cpu"
-model = ResNet18().to(device)
+model = ResNet34().to(device)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
@@ -103,11 +103,11 @@ for epoch in range(epochs):
           f"Test Loss: {avg_test_loss:.4f}, Test Acc: {test_accuracy:.4f}")
 
     # --- Lưu trọng số ---
-    torch.save(model.state_dict(), "weights/last.pth")
+    torch.save(model.state_dict(),f"weights/{model.name}_last.pth")
 
     if test_accuracy > best_acc:
         best_acc = test_accuracy
-        torch.save(model.state_dict(), "weights/best.pth")
+        torch.save(model.state_dict(), f"weights/{model.name}_best.pth")
         print(f"✅ Mô hình tốt nhất mới được lưu với độ chính xác {best_acc:.4f}")
 
     early_stopper(avg_test_loss)
@@ -120,7 +120,8 @@ print("\n🎉 Quá trình huấn luyện hoàn tất!")
 print(f"Độ chính xác kiểm tra tốt nhất: {best_acc:.4f}")
 
 # --- 7. Vẽ biểu đồ mất mát và độ chính xác ---
-epochs_range = range(1, epochs + 1)
+epochs_done = len(loss_info["train_loss"])
+epochs_range = range(1, epochs_done + 1)
 
 plt.figure(figsize=(12, 5))
 
@@ -148,5 +149,5 @@ plt.legend()
 plt.grid(True)
 
 plt.tight_layout()
-plt.savefig(f"images/{model.name}_training_curves.png", dpi=200)
+plt.savefig(f"images/{model.name}_training_curves.png", dpi=300)
 plt.show()
