@@ -24,7 +24,7 @@ test_dataloader = DataLoader(test, batch_size=batch_size, shuffle=False, drop_la
 device = "cuda" if torch.cuda.is_available() else "cpu"
 model = ResNet152().to(device)
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = torch.optim.SGD(model.parameters(), lr=0.01,momentum=0.9, weight_decay=5e-4)
 
 # --- 3. Thông số huấn luyện ---
 epochs = 60
