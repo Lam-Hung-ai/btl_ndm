@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>CIFAR-10 ResNet Predictor • Tailwind</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .drop-hover { border-color: rgb(34 197 94) !important; background-color: rgb(20 83 45 / 0.2) !important; }
+    .checker {
+      background:
+        linear-gradient(45deg,#111827 25%,transparent 25%) -8px 0/16px 16px,
+        linear-gradient(-45deg,#111827 25%,transparent 25%) -8px 0/16px 16px,
+        linear-gradient(45deg,transparent 75%,#111827 75%) -8px 0/16px 16px,
+        linear-gradient(-45deg,transparent 75%,#111827 75%) -8px 0/16px 16px,
+        #0b1220;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-900 text-slate-100">
+  <div class="max-w-6xl mx-auto px-4 py-6">
+    <header class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6">
+      <h1 class="text-2xl sm:text-3xl font-bold tracking-tight">
+        🧠 CIFAR-10 ResNet Predictor
+        <span class="ml-2 text-xs font-semibold px-2 py-1 rounded-full bg-cyan-500/20 text-cyan-200 align-middle">Tailwind + FastAPI</span>
+      </h1>
+      <div id="health" class="text-sm text-slate-400">Đang kiểm tra server…</div>
+    </header>
+
+    <!-- Panel -->
+    <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-4 sm:p-6 shadow-xl">
+      <!-- Uploader -->
+      <div id="uploader"
+           class="border-2 border-dashed border-slate-600 rounded-xl p-4 sm:p-6 bg-slate-800/40 transition-colors">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+          <!-- Left -->
+          <div class="flex flex-col gap-3">
+            <div class="text-lg font-semibold">Kéo & thả ảnh vào đây</div>
+            <p class="text-slate-400 text-sm">
+              Hỗ trợ PNG/JPG. Ảnh sẽ được resize về 32×32 ở backend để khớp CIFAR-10.
+            </p>
+
+            <div class="flex flex-wrap gap-2">
+              <label for="file" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 active:translate-y-px transition text-white cursor-pointer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1M12 12V4m0 0l-3 3m3-3l3 3"/>
+                </svg>
+                Chọn ảnh từ máy
+              </label>
+              <input id="file" type="file" accept="image/png,image/jpeg" class="hidden" />
+
+              <button id="predictBtn" disabled
+                class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-emerald-500 active:translate-y-px transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-9.193-5.318A1 1 0 004 6.64v10.72a1 1 0 001.559.829l9.193-5.318a1 1 0 000-1.702z"/>
+                </svg>
+                Dự đoán
+              </button>
+            </div>
+
+            <div class="flex items-center gap-2 text-sm text-slate-400">
+              <span class="inline-block w-2 h-2 rounded-full bg-red-400" id="statusDot"></span>
+              <span id="statusText">Chưa có ảnh.</span>
+            </div>
+
+            <!-- Zoom control -->
+            <div class="mt-2">
+              <label class="text-sm text-slate-300">Zoom xem trước: <span id="zoomVal" class="font-semibold">2.0×</span></label>
+              <input id="zoomRange" type="range" min="1" max="8" step="0.5" value="2"
+                     class="w-full accent-cyan-400">
+            </div>
+          </div>
+
+          <!-- Right (Preview with zoom) -->
+          <div class="w-full h-80 sm:h-96 lg:h-[28rem] rounded-xl overflow-hidden border border-slate-700 checker relative">
+            <div class="absolute inset-0 overflow-auto" id="zoomPane">
+              <img id="preview"
+                   alt="Xem trước ảnh"
+                   class="select-none block origin-top-left"
+                   style="transform: scale(2); transform-origin: 0 0;" />
+            </div>
+            <div id="previewHint"
+                 class="absolute bottom-2 right-2 text-[11px] sm:text-xs px-2 py-1 rounded-md bg-black/50 border border-white/10 text-white">
+              Kéo để di chuyển khi đang zoom
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="mt-6">
+        <h2 class="text-lg font-semibold mb-3">Kết quả</h2>
+        <div id="results" class="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5"></div>
+      </div>
+    </div>
+
+    <footer class="text-center text-xs text-slate-500 mt-6">
+      Kết nối tới <code id="baseUrlShow" class="text-slate-300">http://127.0.0.1:8000</code>. Hoạt động cục bộ.
+    </footer>
+  </div>
+
+  <script>
+    // ====== Config ======
+    const BASE_URL = 'http://127.0.0.1:8000';
+
+    // ====== Elements ======
+    const healthEl   = document.getElementById('health');
+    const uploader   = document.getElementById('uploader');
+    const fileInput  = document.getElementById('file');
+    const preview    = document.getElementById('preview');
+    const zoomPane   = document.getElementById('zoomPane');
+    const zoomRange  = document.getElementById('zoomRange');
+    const zoomVal    = document.getElementById('zoomVal');
+    const predictBtn = document.getElementById('predictBtn');
+    const resultsEl  = document.getElementById('results');
+    const statusDot  = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const baseUrlShow= document.getElementById('baseUrlShow');
+
+    baseUrlShow.textContent = BASE_URL;
+
+    // ====== Health check ======
+    async function healthCheck() {
+      try {
+        const r = await fetch(`${BASE_URL}/health`);
+        if (!r.ok) throw new Error('health not ok');
+        const j = await r.json();
+        healthEl.innerHTML = `✅ Server sẵn sàng. Thiết bị: <b>${j.device}</b>. Models: ${j.models_loaded.join(', ')}`;
+      } catch (e) {
+        healthEl.innerHTML = `❌ Không kết nối được FastAPI tại <b>${BASE_URL}</b>.`;
+      }
+    }
+    healthCheck();
+
+    // ====== State ======
+    let currentFile = null;
+
+    // ====== Helpers ======
+    function setStatus(ok, msg) {
+      statusDot.className = "inline-block w-2 h-2 rounded-full " + (ok ? "bg-emerald-400" : "bg-red-400");
+      statusText.textContent = msg || (ok ? "Sẵn sàng" : "Chưa có ảnh.");
+    }
+    function clearResults() {
+      resultsEl.innerHTML = '';
+    }
+    function setPreview(file) {
+      const url = URL.createObjectURL(file);
+      preview.src = url;
+      preview.onload = () => { URL.revokeObjectURL(url); };
+      setStatus(true, `Đã chọn ảnh: ${file.name}`);
+      predictBtn.disabled = false;
+    }
+    function renderResults(arr) {
+      const order = {"ResNet18":0,"ResNet34":1,"ResNet50":2,"ResNet101":3,"ResNet152":4};
+      arr.sort((a,b)=> (order[a.model] ?? 99)-(order[b.model] ?? 99));
+
+      clearResults();
+      if (!arr.length) {
+        resultsEl.innerHTML = `<div class="col-span-full p-4 border border-slate-700 rounded-xl text-slate-300">Không có kết quả.</div>`;
+        return;
+      }
+      for (const r of arr) {
+        const pct = Math.round(r.confidence * 1000) / 10; // 0.1%
+        const bar = Math.max(0, Math.min(100, pct));
+        const card = document.createElement('div');
+        card.className = "p-4 rounded-xl border border-slate-700 bg-slate-800/40";
+        card.innerHTML = `
+          <div class="font-semibold mb-1">${r.model}</div>
+          <div class="text-sm text-slate-300">Dự đoán: <span class="font-semibold">${r.pred_class}</span> <span class="text-slate-400">(idx=${r.pred_idx})</span></div>
+          <div class="text-sm text-slate-300 mt-1">Độ tự tin: <span class="font-semibold">${pct}%</span></div>
+          <div class="w-full h-2 bg-slate-700 rounded-full mt-2 overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-cyan-400 to-emerald-400" style="width:${bar}%"></div>
+          </div>
+        `;
+        resultsEl.appendChild(card);
+      }
+    }
+
+    // ====== Drag & Drop ======
+    ['dragenter','dragover'].forEach(ev => {
+      uploader.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); uploader.classList.add('drop-hover'); });
+    });
+    ['dragleave','drop'].forEach(ev => {
+      uploader.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); uploader.classList.remove('drop-hover'); });
+    });
+    uploader.addEventListener('drop', e => {
+      const file = e.dataTransfer?.files?.[0];
+      if (file && /^image\/(png|jpe?g)$/i.test(file.type)) {
+        currentFile = file;
+        setPreview(file);
+      } else {
+        setStatus(false, 'Chỉ hỗ trợ PNG/JPG.');
+      }
+    });
+
+    // ====== File input ======
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files?.[0];
+      if (file && /^image\/(png|jpe?g)$/i.test(file.type)) {
+        currentFile = file;
+        setPreview(file);
+      } else if (file) {
+        setStatus(false, 'Chỉ hỗ trợ PNG/JPG.');
+        predictBtn.disabled = true;
+      }
+    });
+
+    // ====== Zoom controls (range + panning) ======
+    function applyZoom() {
+      const z = parseFloat(zoomRange.value || "2");
+      preview.style.transform = `scale(${z})`;
+      zoomVal.textContent = `${z.toFixed(1)}×`;
+    }
+    zoomRange.addEventListener('input', applyZoom);
+    applyZoom();
+
+    // Panning inside zoomPane when scaled
+    let isDown = false, startX = 0, startY = 0, scrollLeft = 0, scrollTop = 0;
+    zoomPane.addEventListener('mousedown', (e) => {
+      isDown = true;
+      zoomPane.classList.add('cursor-grabbing');
+      startX = e.pageX - zoomPane.offsetLeft;
+      startY = e.pageY - zoomPane.offsetTop;
+      scrollLeft = zoomPane.scrollLeft;
+      scrollTop  = zoomPane.scrollTop;
+    });
+    zoomPane.addEventListener('mouseleave', () => { isDown = false; zoomPane.classList.remove('cursor-grabbing'); });
+    zoomPane.addEventListener('mouseup', () => { isDown = false; zoomPane.classList.remove('cursor-grabbing'); });
+    zoomPane.addEventListener('mousemove', (e) => {
+      if (!isDown) return;
+      e.preventDefault();
+      const x = e.pageX - zoomPane.offsetLeft;
+      const y = e.pageY - zoomPane.offsetTop;
+      const walkX = (x - startX);
+      const walkY = (y - startY);
+      zoomPane.scrollLeft = scrollLeft - walkX;
+      zoomPane.scrollTop  = scrollTop - walkY;
+    });
+
+    // ====== Predict ======
+    predictBtn.addEventListener('click', async () => {
+      if (!currentFile) return;
+      predictBtn.disabled = true;
+      predictBtn.classList.add('opacity-60');
+      setStatus(true, 'Đang dự đoán…');
+      clearResults();
+
+      const form = new FormData();
+      form.append('file', currentFile);
+
+      try {
+        const res = await fetch(`${BASE_URL}/predict`, { method: 'POST', body: form });
+        if (!res.ok) {
+          const t = await res.text();
+          throw new Error(t || 'Predict failed');
+        }
+        const data = await res.json();
+        renderResults(data.results || []);
+        setStatus(true, `Hoàn tất (${data.num_models} model)`);
+      } catch (err) {
+        renderResults([]);
+        setStatus(false, `Lỗi: ${err.message || err}`);
+      } finally {
+        predictBtn.disabled = !currentFile;
+        predictBtn.classList.remove('opacity-60');
+      }
+    });
+  </script>
+</body>
+</html>
